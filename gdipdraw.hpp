@@ -199,16 +199,21 @@ namespace gdipdraw
     class CGdiPlusDrawImage
     {
     public:
-        CGdiPlusDrawImage() {}
+        CGdiPlusDrawImage() {
+            m_nRotate = 0;
+        }
         ~CGdiPlusDrawImage() {}
 
-        BOOL DrawImage(IN CDCHandle& dc, IN Gdiplus::Image* lpImage, IN const Gdiplus::Rect& destRect);
+        BOOL DrawImageStatic(IN HDC& dc, IN Gdiplus::Image* lpImage, IN const Gdiplus::Rect& destRect);
+        BOOL DrawImageRotation(IN HDC& dc, IN Gdiplus::Image* lpImage, IN const Gdiplus::Rect& destRect, IN INT nRotate = 0);
+        BOOL DrawImageZoom(IN HDC& dc, IN Gdiplus::Image* lpImage, IN const Gdiplus::Rect& destRect, IN InterpolationMode nZoomMode = InterpolationModeBicubic);
 
     private:
+        INT m_nRotate;
         CGdiPlusImageData m_imageData;
     };
 
-    BOOL CGdiPlusDrawImage::DrawImage( IN CDCHandle& dc, IN Gdiplus::Image* lpImage, IN const Gdiplus::Rect& destRect )
+    BOOL CGdiPlusDrawImage::DrawImageStatic( IN HDC& dc, IN Gdiplus::Image* lpImage, IN const Gdiplus::Rect& destRect )
     {
         Gdiplus::Graphics graphics(dc);
         Gdiplus::Image* pDrawImg = lpImage;
@@ -223,8 +228,60 @@ namespace gdipdraw
                                   pDrawImg->GetWidth(),
                                   pDrawImg->GetHeight(),
                                   Gdiplus::UnitPixel );
-        if (sRet != Ok)
-        {
+        if (sRet != Ok) {
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    BOOL CGdiPlusDrawImage::DrawImageRotation( IN HDC& dc, IN Gdiplus::Image* lpImage, IN const Gdiplus::Rect& destRect, IN INT nRotate /*= 0*/ )
+    {
+        Gdiplus::Graphics graphics(dc);
+        Gdiplus::Image* pDrawImg = lpImage;
+
+        if(pDrawImg == NULL || 0 == pDrawImg->GetHeight() || pDrawImg->GetLastStatus() != Gdiplus::Ok) {
+            return FALSE;
+        }
+
+        INT nX = destRect.X + destRect.Width / 2;
+        INT nY = destRect.Y + destRect.Height / 2;
+
+        m_nRotate += nRotate;
+        m_nRotate = m_nRotate % 360;
+        graphics.TranslateTransform(nX, nY);
+        graphics.RotateTransform(m_nRotate);
+        graphics.TranslateTransform(-nX, -nY);
+
+        Status sRet = graphics.DrawImage(pDrawImg, 
+                                    destRect,
+                                    0, 0,
+                                    pDrawImg->GetWidth(),
+                                    pDrawImg->GetHeight(),
+                                    Gdiplus::UnitPixel );
+        graphics.ResetTransform();
+        if (sRet != Ok) {
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    BOOL CGdiPlusDrawImage::DrawImageZoom( IN HDC& dc, IN Gdiplus::Image* lpImage, IN const Gdiplus::Rect& destRect, IN InterpolationMode nZoomMode /*= InterpolationModeHighQuality*/ )
+    {
+        Gdiplus::Graphics graphics(dc);
+        Gdiplus::Image* pDrawImg = lpImage;
+
+        if(pDrawImg == NULL || 0 == pDrawImg->GetHeight() || pDrawImg->GetLastStatus() != Gdiplus::Ok) {
+            return FALSE;
+        }
+
+        graphics.SetInterpolationMode(nZoomMode);
+        Status sRet = graphics.DrawImage(pDrawImg, 
+            destRect,
+            0, 0,
+            pDrawImg->GetWidth(),
+            pDrawImg->GetHeight(),
+            Gdiplus::UnitPixel );
+        if (sRet != Ok) {
             return FALSE;
         }
         return TRUE;
@@ -239,10 +296,21 @@ namespace gdipdraw
             ClearAllImageData();
         }
 
-        BOOL DrawImage(IN CDCHandle& dc, 
+        BOOL DrawImage(IN HDC& dc, 
                        IN LPCTSTR lpFilePath, 
                        IN const Gdiplus::Rect& destRect);
 
+        BOOL DrawImageRotation(IN HDC& dc, 
+            IN LPCTSTR lpFilePath, 
+            IN const Gdiplus::Rect& destRect,
+            IN INT nRotate = 0);
+
+        BOOL DrawImageZoom(IN HDC& dc, 
+            IN LPCTSTR lpFilePath, 
+            IN const Gdiplus::Rect& destRect,
+            IN InterpolationMode nZoomMode = InterpolationModeBicubic);
+
+    private:
         VOID ClearAllImageData();
 
     private:
@@ -251,15 +319,30 @@ namespace gdipdraw
         CGdiPlusDrawImage m_drawImage;
     };
 
-    BOOL CGdipdraw::DrawImage( IN CDCHandle& dc, IN LPCTSTR lpFilePath, IN const Gdiplus::Rect& destRect )
+    BOOL CGdipdraw::DrawImage( IN HDC& dc, IN LPCTSTR lpFilePath, IN const Gdiplus::Rect& destRect )
     {
         Gdiplus::Image* lpImage = NULL;
         lpImage = m_imageData.LoadImageFromStream(lpFilePath);
-        return m_drawImage.DrawImage(dc, lpImage, destRect);
+        return m_drawImage.DrawImageStatic(dc, lpImage, destRect);
     }
 
     VOID CGdipdraw::ClearAllImageData()
     {
         m_imageData.ClearAllImageData();
     }
+
+    BOOL CGdipdraw::DrawImageRotation( IN HDC& dc, IN LPCTSTR lpFilePath, IN const Gdiplus::Rect& destRect, IN INT nRotate /*= 0*/ )
+    {
+        Gdiplus::Image* lpImage = NULL;
+        lpImage = m_imageData.LoadImageFromStream(lpFilePath);
+        return m_drawImage.DrawImageRotation(dc, lpImage, destRect, nRotate);
+    }
+
+    BOOL CGdipdraw::DrawImageZoom( IN HDC& dc, IN LPCTSTR lpFilePath, IN const Gdiplus::Rect& destRect, IN InterpolationMode nZoomMode /*= InterpolationModeHighQuality*/ )
+    {
+        Gdiplus::Image* lpImage = NULL;
+        lpImage = m_imageData.LoadImageFromStream(lpFilePath);
+        return m_drawImage.DrawImageZoom(dc, lpImage, destRect, nZoomMode);
+    }
+
 }
